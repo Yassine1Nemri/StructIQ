@@ -1,0 +1,11 @@
+// Phase 0 foundation checks only. Full DevSecOps pipeline arrives in Phase 5.
+pipeline {
+    agent any
+    options { timestamps(); disableConcurrentBuilds() }
+    stages {
+        stage('Checkout') { steps { checkout scm } }
+        stage('Local configuration') { steps { sh 'make secrets' } }
+        stage('Build and tests') { steps { sh 'make test' } }
+    }
+    post { always { archiveArtifacts artifacts: 'docs/evidence/*.md', allowEmptyArchive: true } }
+}

@@ -1,0 +1,80 @@
+name: structiq
+services:
+  postgres:
+    image: pgvector/pgvector:0.8.2-pg17
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-structiq}
+      POSTGRES_USER: ${POSTGRES_USER:-structiq}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run make secrets before starting}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./infra/postgres/001-vector.sql:/docker-entrypoint-initdb.d/001-vector.sql:ro
+    networks: [internal]
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+  ai:
+    build: ./ai-service
+    environment:
+      INTERNAL_AI_SHARED_SECRET: ${INTERNAL_AI_SHARED_SECRET:?Run make secrets before starting}
+      DOCUMENT_ROOT: /data/documents
+    group_add: ["10001"]
+    volumes:
+      - private_documents:/data/documents:ro
+    networks: [internal]
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    restart: unless-stopped
+  backend:
+    build: ./backend
+    environment:
+      DATABASE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-structiq}
+      POSTGRES_USER: ${POSTGRES_USER:-structiq}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run make secrets before starting}
+      FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:5173}
+      JWT_SECRET: ${JWT_SECRET:?Run make secrets before starting}
+      APP_DOCS_ENABLED: "true"
+      INTERNAL_AI_SHARED_SECRET: ${INTERNAL_AI_SHARED_SECRET:?Run make secrets before starting}
+      INTERNAL_AI_URL: http://ai:8000
+      DOCUMENT_ROOT: /var/lib/structiq/documents
+      UPLOAD_MAX_BYTES: ${UPLOAD_MAX_BYTES:-10485760}
+    volumes:
+      - private_documents:/var/lib/structiq/documents
+    ports: ["127.0.0.1:8080:8080"]
+    networks: [edge, internal]
+    depends_on:
+      postgres: {condition: service_healthy}
+      ai: {condition: service_healthy}
+    healthcheck:
+      test: [CMD, curl, --fail, --silent, http://localhost:8080/actuator/health/readiness]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 30s
+    restart: unless-stopped
+  frontend:
+    build: ./frontend
+    ports: ["127.0.0.1:5173:8080"]
+    networks: [edge]
+    depends_on:
+      backend: {condition: service_healthy}
+    healthcheck:
+      test: [CMD, wget, -q, -O, /dev/null, http://127.0.0.1:8080/]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+networks:
+  edge:
+  internal:
+    internal: true
+volumes:
+  postgres_data:
+  private_documents:

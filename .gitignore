@@ -1,0 +1,23 @@
+# Local secrets and private data
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+uploads/
+.demo-credentials.json
+# Build output
+**/target/
+**/node_modules/
+**/dist/
+**/.venv/
+**/__pycache__/
+**/.pytest_cache/
+**/.ruff_cache/
+*.pyc
+*.tsbuildinfo
+*.egg-info/
+coverage/
+*.log
+.idea/
+.vscode/

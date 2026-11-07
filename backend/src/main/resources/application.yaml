@@ -1,0 +1,48 @@
+spring:
+  servlet:
+    multipart:
+      max-file-size: ${UPLOAD_MAX_BYTES:10485760}B
+      max-request-size: 11MB
+  application:
+    name: structiq-api
+  datasource:
+    url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/structiq}
+    username: ${POSTGRES_USER:structiq}
+    password: ${POSTGRES_PASSWORD:}
+    hikari:
+      initialization-fail-timeout: -1
+      connection-timeout: 3000
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never
+      probes:
+        enabled: true
+      group:
+        readiness:
+          include: readinessState,db
+server:
+  error:
+    include-message: never
+    include-stacktrace: never
+    include-binding-errors: never
+structiq:
+  frontend-origin: ${FRONTEND_ORIGIN:http://localhost:5173}
+  jwt-secret: ${JWT_SECRET}
+  demo-seed-enabled: ${DEMO_SEED_ENABLED:false}
+  demo-password: ${DEMO_PASSWORD:}
+  docs-enabled: ${APP_DOCS_ENABLED:false}
+  document-root: ${DOCUMENT_ROOT:${java.io.tmpdir}/structiq-documents}
+  upload-max-bytes: ${UPLOAD_MAX_BYTES:10485760}
+  ai-url: ${INTERNAL_AI_URL:http://ai:8000}
+  internal-secret: ${INTERNAL_AI_SHARED_SECRET}
+springdoc:
+  api-docs:
+    enabled: ${APP_DOCS_ENABLED:false}
+  swagger-ui:
+    enabled: ${APP_DOCS_ENABLED:false}
+    persist-authorization: false
