@@ -1,4 +1,4 @@
-export interface SystemStatus { name: string; phase: 'DOCUMENTS'; aiStatus: 'NOT_IMPLEMENTED' }
+export interface SystemStatus { name: string; phase: 'SECURE_RAG'; aiStatus: 'OPTIONAL_GEMINI' }
 export interface User { id: string; email: string; displayName: string; globalRole: 'ADMIN' | 'USER' }
 export type ProjectStatus = 'PLANNED' | 'ACTIVE' | 'COMPLETED' | 'ARCHIVED';
 export type MemberRole = 'MANAGER' | 'MEMBER' | 'VIEWER';
@@ -42,7 +42,7 @@ export async function request<T>(path: string, options: RequestInit = {}): Promi
 }
 export async function getSystemStatus(signal?: AbortSignal): Promise<SystemStatus> {
   const data = await request<SystemStatus>('/system/status', { signal });
-  if (data.name !== 'StructIQ' || data.phase !== 'DOCUMENTS' || data.aiStatus !== 'NOT_IMPLEMENTED')
+  if (data.name !== 'StructIQ' || data.phase !== 'SECURE_RAG' || data.aiStatus !== 'OPTIONAL_GEMINI')
     throw new Error('The API returned an unexpected response.');
   return data;
 }
@@ -87,3 +87,10 @@ export const uploadDocument = (projectId: string, file: File) => {
 export const downloadDocument = async (projectId: string, documentId: string) => (await fetchResponse(`/projects/${projectId}/documents/${documentId}/download`)).blob();
 export const deleteDocument = (projectId: string, documentId: string) => request<void>(`/projects/${projectId}/documents/${documentId}`, { method: 'DELETE' });
 export const retryDocument = (projectId: string, documentId: string) => request<DocumentMetadata>(`/projects/${projectId}/documents/${documentId}/retry`, { method: 'POST' });
+
+export interface AiStatus { configured: boolean }
+export interface Citation { chunkId: string; documentId: string; filename: string; pageNumber: number; excerpt: string }
+export interface AiAnswer { answer: string; citations: Citation[]; retrievalCount: number }
+export const getAiStatus = (projectId: string, signal?: AbortSignal) => request<AiStatus>(`/projects/${projectId}/ai/status`, { signal });
+export const askAi = (projectId: string, question: string) => request<AiAnswer>(`/projects/${projectId}/ai/ask`, { method: 'POST', body: JSON.stringify({ question }) });
+export const indexDocument = (projectId: string, documentId: string) => request<{ indexedChunks: number }>(`/projects/${projectId}/documents/${documentId}/index`, { method: 'POST' });

@@ -25,10 +25,11 @@ public class DocumentService {
     private final ProjectService projects;
     private final ProjectRepository projectRows;
     private final TransactionTemplate tx;
+    private final dev.structiq.ai.AiService ai;
     public DocumentService(DocumentRepository docs,PrivateStorage storage,UploadValidator validator,ExtractionClient parser,
-        DocumentCleanup cleanup,ProjectService projects,ProjectRepository projectRows,TransactionTemplate tx) {
+        DocumentCleanup cleanup,ProjectService projects,ProjectRepository projectRows,TransactionTemplate tx,dev.structiq.ai.AiService ai) {
         this.docs=docs; this.storage=storage; this.validator=validator; this.parser=parser; this.cleanup=cleanup;
-        this.projects=projects; this.projectRows=projectRows; this.tx=tx;
+        this.projects=projects; this.projectRows=projectRows; this.tx=tx; this.ai=ai;
     }
     public Page list(User user,UUID project,int page,int size) {
         return tx.execute(status -> {
@@ -79,6 +80,10 @@ public class DocumentService {
             projectRows.lock(project);
             if(docs.find(project,stored.metadata().id()).isPresent()) docs.finish(project,stored.metadata().id(),result);
         });
+        if(result.code().equals("TEXT_EXTRACTED_AI_PENDING")) {
+            try { if(ai.status(user,project).configured()) ai.index(user,project,stored.metadata().id()); }
+            catch(ApiException ignored) { /* Text and file remain usable; explicit indexing can be retried. */ }
+        }
         return tx.execute(status -> {
             projects.get(user,project);
             return docs.find(project,stored.metadata().id()).orElseThrow(ApiException::missing).metadata();

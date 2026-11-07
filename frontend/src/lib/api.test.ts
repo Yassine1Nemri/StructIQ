@@ -4,7 +4,7 @@ import { ApiError, getSystemStatus, onSessionExpired, request, setAccessToken } 
 afterEach(() => { vi.unstubAllGlobals(); setAccessToken(null); onSessionExpired(() => {}); });
 describe('system status client', () => {
   it('reads the real endpoint and passes cancellation', async () => {
-    const body = { name: 'StructIQ', phase: 'DOCUMENTS', aiStatus: 'NOT_IMPLEMENTED' };
+    const body = { name: 'StructIQ', phase: 'SECURE_RAG', aiStatus: 'OPTIONAL_GEMINI' };
     const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify(body)));
     vi.stubGlobal('fetch', fetcher);
     const signal = new AbortController().signal;
@@ -94,4 +94,12 @@ it('downloads private bytes through the authenticated scoped endpoint', async ()
   expect(await (await downloadDocument('project-a', 'document-a')).text()).toBe('private synthetic bytes');
   expect(fetcher.mock.calls[0][0]).toBe('/api/projects/project-a/documents/document-a/download');
   expect(new Headers(fetcher.mock.calls[0][1].headers).get('Authorization')).toBe('Bearer synthetic-document-token');
+});
+
+it('asks AI only through the authorized project path without browser scope filters', async () => {
+  const { askAi } = await import('./api');
+  const fetcher = vi.fn().mockResolvedValue(new Response('{}')); vi.stubGlobal('fetch', fetcher);
+  await askAi('project-a', 'What was agreed?');
+  expect(fetcher.mock.calls[0][0]).toBe('/api/projects/project-a/ai/ask');
+  expect(JSON.parse(fetcher.mock.calls[0][1].body)).toEqual({ question: 'What was agreed?' });
 });

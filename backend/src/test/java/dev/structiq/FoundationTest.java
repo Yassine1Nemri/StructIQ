@@ -28,7 +28,7 @@ class FoundationTest {
     @Test void statusReportsFoundationWithoutClaimingAi() throws Exception {
         var response = get("/api/system/status");
         assertThat(response.statusCode()).isEqualTo(200);
-        assertThat(response.body()).contains("StructIQ", "DOCUMENTS", "NOT_IMPLEMENTED");
+        assertThat(response.body()).contains("StructIQ", "SECURE_RAG", "OPTIONAL_GEMINI");
     }
 
     @Test void projectRoutesFailClosed() throws Exception {

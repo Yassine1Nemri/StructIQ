@@ -25,7 +25,7 @@ it('restricts member deletion to own uploads and lets managers delete others', (
   expect(render('MANAGER', 'someone-else')).toContain('>Delete');
 });
 it('shows extracted text as pending AI indexing and exposes useful scanned-PDF failures', () => {
-  expect(render('MEMBER')).toContain('AI indexing is not yet available');
+  expect(render('MEMBER')).toContain('Ready to index for AI');
   const failed = render('MEMBER', 'member', 'FAILED');
   expect(failed).toContain('Scanned PDFs need OCR');
   expect(failed).toContain('Retry extraction');

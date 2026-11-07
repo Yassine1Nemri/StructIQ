@@ -7,7 +7,8 @@ services = config["services"]
 assert set(services) == {"postgres", "backend", "ai", "frontend"}
 for name in ("postgres", "ai"):
     assert not services[name].get("ports"), f"{name} must not expose host ports"
-    assert set(services[name]["networks"]) == {"internal"}
+assert set(services["postgres"]["networks"]) == {"internal"}
+assert set(services["ai"]["networks"]) == {"internal", "provider_egress"}
 assert config["networks"]["internal"]["internal"] is True
 for name in ("backend", "frontend"):
     assert all(port["host_ip"] == "127.0.0.1" for port in services[name]["ports"])

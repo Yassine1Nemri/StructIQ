@@ -17,7 +17,7 @@ export function documentStatus(document: api.DocumentMetadata): string {
   if (document.processingStatus === 'FAILED') return failures[document.processingCode] ?? 'Text extraction failed. Retry or replace this document.';
   if (document.processingStatus === 'PROCESSING') return 'Extracting text…';
   if (document.processingStatus === 'READY') return 'Ready for AI';
-  return document.extractedPages ? `Text extracted from ${document.extractedPages} page(s). AI indexing is not yet available.` : 'Stored. Text extraction pending.';
+  return document.extractedPages ? `Text extracted from ${document.extractedPages} page(s). Ready to index for AI.` : 'Stored. Text extraction pending.';
 }
 export function Documents({ project, userId }: { project: api.Project; userId: string }) {
   const cache = useQueryClient(); const inputRef = useRef<HTMLInputElement>(null);
@@ -30,6 +30,8 @@ export function Documents({ project, userId }: { project: api.Project; userId: s
   const upload = useMutation({ mutationFn: (value: File) => api.uploadDocument(project.id, value), onSuccess: () => { setFile(null); if (inputRef.current) inputRef.current.value = ''; setPage(0); refresh(); } });
   const remove = useMutation({ mutationFn: (id: string) => api.deleteDocument(project.id, id), onSuccess: refresh });
   const retry = useMutation({ mutationFn: (id: string) => api.retryDocument(project.id, id), onSuccess: refresh });
+  const index = useMutation({ mutationFn: (id: string) => api.indexDocument(project.id, id), onSuccess: refresh });
+  const aiStatus = useQuery({ queryKey: ['ai-status', project.id], queryFn: ({ signal }) => api.getAiStatus(project.id, signal) });
   const download = useMutation({ mutationFn: async (d: api.DocumentMetadata) => {
     const blob = await api.downloadDocument(project.id, d.id);
     const url = URL.createObjectURL(blob); const link = document.createElement('a');
@@ -55,15 +57,16 @@ export function Documents({ project, userId }: { project: api.Project; userId: s
       <button className="primary" disabled={!file || upload.isPending || !query.data}>{upload.isPending ? 'Uploading and extracting text…' : 'Upload document'}</button>
       {upload.isPending && <p role="status">Keep this page open while the document is stored and processed.</p>}
     </form>}
-    <ErrorMessage error={remove.error || retry.error || download.error}/>{downloadName && <p className="hint" role="status">Download requested: {downloadName}</p>}
+    <ErrorMessage error={remove.error || retry.error || index.error || download.error}/>{downloadName && <p className="hint" role="status">Download requested: {downloadName}</p>}
     {query.isPending ? <p role="status">Loading documents…</p> : query.isError ? <><ErrorMessage error={query.error}/><button onClick={() => void query.refetch()}>Try again</button></> : <>
       {!query.data.items.length ? <div className="panel"><h3>No documents yet</h3><p>{uploadAllowed ? 'Upload a meeting report or project document to keep it with this project.' : 'A project member can upload documents for you to read.'}</p></div> : <ul className="document-list">{query.data.items.map(d => <li className="panel document-card" key={d.id}>
         <div><h3>{d.filename}</h3><p className="hint">{d.mimeType === 'application/pdf' ? 'PDF' : 'TXT'} · {(d.sizeBytes / 1024).toFixed(1)} KiB · {d.createdAt.slice(0, 10)}</p><p className={d.processingStatus === 'FAILED' ? 'document-failed' : 'hint'}>{documentStatus(d)}</p></div>
         <div className="actions"><button disabled={download.isPending} onClick={() => download.mutate(d)}>Download<span className="sr-only"> {d.filename}</span></button>
+          {uploadAllowed && aiStatus.data?.configured && d.extractedPages > 0 && d.processingStatus !== 'PROCESSING' && <button disabled={index.isPending} onClick={() => index.mutate(d.id)}>{index.isPending ? 'Indexing…' : d.processingStatus === 'READY' ? 'Reindex for AI' : 'Index for AI'}</button>}
           {uploadAllowed && d.processingStatus === 'FAILED' && <button disabled={retry.isPending} onClick={() => retry.mutate(d.id)}>{retry.isPending ? 'Retrying…' : 'Retry extraction'}</button>}
           {uploadAllowed && (manage || d.uploadedBy === userId) && <button className="danger" disabled={remove.isPending} onClick={() => { if (window.confirm(`Delete document “${d.filename}” and its extracted data?`)) remove.mutate(d.id); }}>Delete<span className="sr-only"> {d.filename}</span></button>}</div>
       </li>)}</ul>}
       <div className="pagination"><button disabled={!page} onClick={() => setPage(page - 1)}>Previous documents</button><span>Page {page + 1}</span><button disabled={!query.data.hasNext} onClick={() => setPage(page + 1)}>Next documents</button></div></>}
-    <p className="hint">Downloads require your current project access. AI answers and indexing are not yet enabled.</p>
+    <p className="hint">Downloads require your current project access. Ask the project assistant after documents are indexed.</p>
   </section>;
 }

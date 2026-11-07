@@ -42,8 +42,21 @@ it('renders actual dashboard counts, progress and deadline links', () => {
     overdue: [{ taskId: task.id, projectId: project.id, projectName: project.name, title: 'Late inspection', assigneeName: 'Test member', dueDate: '2026-11-06' }], upcoming: [] };
   cache.setQueryData(['dashboard'], data);
   const markup = renderToStaticMarkup(<QueryClientProvider client={cache}><MemoryRouter><Dashboard/></MemoryRouter></QueryClientProvider>);
-  expect(markup).toContain('Assigned to me</h2><strong>7</strong>');
+  expect(markup).toContain('aria-label="Assigned to me: 7"');
+  expect(markup).toContain('aria-label="25% of accessible tasks complete"');
+  expect(markup).toContain('/projects/project-a?tab=assistant');
+  expect(markup).toContain('/projects/project-a?tab=tasks');
   expect(markup).toContain('Actual project: 25% complete');
   expect(markup).toContain('Late inspection');
   expect(markup).toContain('/projects/project-a');
+});
+
+it('groups the current page into board columns without exposing extra member controls', () => {
+  const html = tasksMarkup('MEMBER', 'member');
+  expect(html).toContain('task-board');
+  expect(html).toContain('board-column status-todo');
+  expect(html).toContain('board-column status-done');
+  expect(html).toContain('up to 12 tasks');
+  expect(html).not.toContain('>Edit</button>');
+  expect(html).toContain('aria-pressed="true"');
 });

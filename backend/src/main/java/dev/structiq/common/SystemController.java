@@ -10,6 +10,6 @@ public class SystemController {
     @GetMapping("/api/system/status")
     @io.swagger.v3.oas.annotations.security.SecurityRequirements
     public SystemStatus status() {
-        return new SystemStatus("StructIQ", "DOCUMENTS", "NOT_IMPLEMENTED");
+        return new SystemStatus("StructIQ", "SECURE_RAG", "OPTIONAL_GEMINI");
     }
 }

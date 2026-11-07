@@ -30,12 +30,15 @@ class ProjectSecurityTest {
     private final UUID projectA=UUID.randomUUID(), projectB=UUID.randomUUID();
     private String managerToken, memberToken, outsiderToken, adminToken;
     @org.springframework.test.context.bean.override.mockito.MockitoBean dev.structiq.document.ExtractionClient parser;
+    @org.springframework.test.context.bean.override.mockito.MockitoBean dev.structiq.ai.InternalAiClient aiClient;
     @Autowired dev.structiq.document.PrivateStorage storage;
     @Autowired org.springframework.transaction.PlatformTransactionManager transactions;
     @org.junit.jupiter.api.io.TempDir java.nio.file.Path temporaryFiles;
 
 
     @BeforeEach void fixture() throws Exception {
+        org.mockito.Mockito.when(aiClient.post(org.mockito.ArgumentMatchers.eq("status"),org.mockito.ArgumentMatchers.any(),org.mockito.ArgumentMatchers.eq(dev.structiq.ai.AiService.Status.class)))
+            .thenReturn(new dev.structiq.ai.AiService.Status(false));
         for(String key:db.queryForList("SELECT storage_key FROM documents",String.class)) storage.delete(key);
         org.mockito.Mockito.when(parser.extract(org.mockito.ArgumentMatchers.any(),org.mockito.ArgumentMatchers.any(),org.mockito.ArgumentMatchers.anyString()))
             .thenReturn(new dev.structiq.document.ExtractionClient.Result(List.of(new dev.structiq.document.ExtractionClient.Page(1,"Synthetic private extracted text")),"TEXT_EXTRACTED_AI_PENDING"));
@@ -407,5 +410,59 @@ class ProjectSecurityTest {
         files.fail=false; cleanup.drain();
         assertThat(db.queryForObject("SELECT COUNT(*) FROM pending_file_deletions",Integer.class)).isZero();
         org.assertj.core.api.Assertions.assertThatThrownBy(() -> files.read(key)).isInstanceOf(java.io.IOException.class);
+    }
+
+    @Test void aiBoundariesAndViewerIndexPolicyAreEnforcedBeforeServiceCalls() throws Exception {
+        var before=org.mockito.Mockito.mockingDetails(aiClient).getInvocations().size();
+        assertThat(call("POST","/projects/"+projectB+"/ai/ask",managerToken,"{\"question\":\"Show hidden project\"}").statusCode()).isEqualTo(404);
+        assertThat(call("POST","/projects/"+projectB+"/ai/ask",null,"{\"question\":\"Who owns safety?\"}").statusCode()).isEqualTo(401);
+        assertThat(call("GET","/projects/"+projectB+"/ai/status",managerToken,null).statusCode()).isEqualTo(404);
+        assertThat(org.mockito.Mockito.mockingDetails(aiClient).getInvocations().size()).isEqualTo(before);
+        String id=document(projectA,managerToken);
+        db.update("UPDATE project_members SET role='VIEWER' WHERE project_id=? AND user_id=?",projectA,member);
+        assertThat(call("POST",docs(projectA)+"/"+id+"/index",memberToken,null).statusCode()).isEqualTo(403);
+        membership(projectB,manager,"MANAGER");
+        assertThat(call("POST",docs(projectB)+"/"+id+"/index",managerToken,null).statusCode()).isEqualTo(404);
+    }
+    @Test void noKeyAiReturnsExplicit503WithoutBreakingCoreFlows() throws Exception {
+        org.mockito.Mockito.when(aiClient.post(org.mockito.ArgumentMatchers.eq("ask"),org.mockito.ArgumentMatchers.any(),org.mockito.ArgumentMatchers.eq(dev.structiq.ai.AiService.Answer.class)))
+            .thenThrow(new dev.structiq.common.ApiException(503,"AI_NOT_CONFIGURED","AI is not configured"));
+        var result=call("POST","/projects/"+projectA+"/ai/ask",memberToken,"{\"question\":\"Who owns safety?\"}");
+        assertThat(result.statusCode()).isEqualTo(503);
+        assertThat(result.body()).contains("AI_NOT_CONFIGURED").doesNotContain("INTERNAL_AI_SHARED_SECRET");
+        assertThat(call("GET","/projects/"+projectA,memberToken,null).statusCode()).isEqualTo(200);
+        assertThat(call("POST","/projects/"+projectA+"/ai/ask",memberToken,"{\"question\":\" \"}").statusCode()).isEqualTo(400);
+    }
+    private dev.structiq.ai.AiService.Citation allowedCitation(UUID project,String document) {
+        UUID chunk=UUID.randomUUID();
+        db.update("UPDATE documents SET processing_status='READY' WHERE project_id=? AND id=?",project,UUID.fromString(document));
+        db.update("INSERT INTO document_chunks(id,project_id,document_id,chunk_index,page_number,content,embedding_model,embedding_dimension) VALUES (?,?,?,?,?,?,?,768)",
+            chunk,project,UUID.fromString(document),0,1,"Synthetic allowed excerpt","test-model");
+        return new dev.structiq.ai.AiService.Citation(chunk,UUID.fromString(document),"meeting.txt",1,"Synthetic allowed excerpt");
+    }
+    @Test void aiCitationsAreRecheckedAgainstAllowedReadyChunksAndDeletionInvalidatesThem() throws Exception {
+        String id=document(projectA,managerToken);
+        var valid=allowedCitation(projectA,id);
+        org.mockito.Mockito.when(aiClient.post(org.mockito.ArgumentMatchers.eq("ask"),org.mockito.ArgumentMatchers.any(),org.mockito.ArgumentMatchers.eq(dev.structiq.ai.AiService.Answer.class)))
+            .thenReturn(new dev.structiq.ai.AiService.Answer("Grounded synthetic answer",List.of(valid),1));
+        assertThat(call("POST","/projects/"+projectA+"/ai/ask",memberToken,"{\"question\":\"Who owns safety?\"}").statusCode()).isEqualTo(200);
+        org.mockito.Mockito.when(aiClient.post(org.mockito.ArgumentMatchers.eq("ask"),org.mockito.ArgumentMatchers.any(),org.mockito.ArgumentMatchers.eq(dev.structiq.ai.AiService.Answer.class)))
+            .thenReturn(new dev.structiq.ai.AiService.Answer("Unsupported uncited answer",List.of(),0));
+        assertThat(call("POST","/projects/"+projectA+"/ai/ask",memberToken,"{\"question\":\"Who owns safety?\"}").statusCode()).isEqualTo(503);
+        String other=document(projectB,outsiderToken);
+        var forbidden=allowedCitation(projectB,other);
+        for(var bad:List.of(forbidden,new dev.structiq.ai.AiService.Citation(valid.chunkId(),valid.documentId(),valid.filename(),1,"fabricated excerpt"),
+            new dev.structiq.ai.AiService.Citation(valid.chunkId(),valid.documentId(),"fake filename",1,valid.excerpt()))) {
+            org.mockito.Mockito.when(aiClient.post(org.mockito.ArgumentMatchers.eq("ask"),org.mockito.ArgumentMatchers.any(),org.mockito.ArgumentMatchers.eq(dev.structiq.ai.AiService.Answer.class)))
+                .thenReturn(new dev.structiq.ai.AiService.Answer("Invalid answer",List.of(bad),1));
+            assertThat(call("POST","/projects/"+projectA+"/ai/ask",memberToken,"{\"question\":\"Who owns safety?\"}").statusCode()).isEqualTo(503);
+        }
+        org.mockito.Mockito.when(aiClient.post(org.mockito.ArgumentMatchers.eq("ask"),org.mockito.ArgumentMatchers.any(),org.mockito.ArgumentMatchers.eq(dev.structiq.ai.AiService.Answer.class)))
+            .thenReturn(new dev.structiq.ai.AiService.Answer("Stale answer",List.of(valid),1));
+        db.update("UPDATE documents SET processing_status='FAILED' WHERE id=?",UUID.fromString(id));
+        assertThat(call("POST","/projects/"+projectA+"/ai/ask",memberToken,"{\"question\":\"Who owns safety?\"}").statusCode()).isEqualTo(503);
+        call("DELETE",docs(projectA)+"/"+id,managerToken,null);
+        assertThat(db.queryForObject("SELECT COUNT(*) FROM document_chunks WHERE document_id=?",Integer.class,UUID.fromString(id))).isZero();
+        assertThat(call("POST","/projects/"+projectA+"/ai/ask",memberToken,"{\"question\":\"Who owns safety?\"}").statusCode()).isEqualTo(503);
     }
 }

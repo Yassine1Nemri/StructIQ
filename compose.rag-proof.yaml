@@ -1,0 +1,16 @@
+# Test-only override: mock provider code exists only in the test image.
+services:
+  ai:
+    build:
+      context: ./ai-service
+      target: test
+    command: [uvicorn, tests.mock_server:app, --host, 0.0.0.0, --port, "8000", --no-access-log]
+    environment:
+      GEMINI_API_KEY: ""
+      GEMINI_GENERATION_MODEL: ""
+  backend:
+    ports: !override []
+    environment:
+      FRONTEND_ORIGIN: http://localhost:5174
+  frontend:
+    ports: !override ["127.0.0.1:5174:8080"]

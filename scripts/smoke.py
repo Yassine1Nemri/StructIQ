@@ -11,7 +11,7 @@ def read(url):
 
 
 assert "StructIQ" in read("http://localhost:5173/")
-assert json.loads(read("http://localhost:5173/api/system/status"))["phase"] == "DOCUMENTS"
+assert json.loads(read("http://localhost:5173/api/system/status"))["phase"] == "SECURE_RAG"
 health = json.loads(read("http://localhost:8080/actuator/health"))
 assert health["status"] == "UP"
 assert set(health) <= {"status", "groups"}, "Health must not expose component details"

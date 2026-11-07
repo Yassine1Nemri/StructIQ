@@ -21,10 +21,24 @@ services:
     environment:
       INTERNAL_AI_SHARED_SECRET: ${INTERNAL_AI_SHARED_SECRET:?Run make secrets before starting}
       DOCUMENT_ROOT: /data/documents
+      POSTGRES_HOST: postgres
+      POSTGRES_DB: ${POSTGRES_DB:-structiq}
+      POSTGRES_USER: ${POSTGRES_USER:-structiq}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run make secrets before starting}
+      AI_PROVIDER: ${AI_PROVIDER:-gemini}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      OLLAMA_GENERATION_MODEL: ${OLLAMA_GENERATION_MODEL:-qwen3:4b}
+      OLLAMA_EMBEDDING_MODEL: ${OLLAMA_EMBEDDING_MODEL:-qwen3-embedding:0.6b}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_GENERATION_MODEL: ${GEMINI_GENERATION_MODEL:-}
+      GEMINI_EMBEDDING_MODEL: ${GEMINI_EMBEDDING_MODEL:-gemini-embedding-001}
+      EMBEDDING_DIMENSION: ${EMBEDDING_DIMENSION:-768}
     group_add: ["10001"]
+    extra_hosts: ["host.docker.internal:host-gateway"]
     volumes:
       - private_documents:/data/documents:ro
-    networks: [internal]
+    networks: [internal, provider_egress]
+    # Provider egress and host Ollama access; no AI host ports are published.
     healthcheck:
       test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
       interval: 10s
@@ -75,6 +89,7 @@ networks:
   edge:
   internal:
     internal: true
+  provider_egress: {}
 volumes:
   postgres_data:
   private_documents:

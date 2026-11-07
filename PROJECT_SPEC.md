@@ -29,6 +29,15 @@ The assistant answers from **only documents the current user is authorized to re
 
 ## 3. Stack and decisions
 
+**Local provider amendment (2026-11-07, requested by the owner):** Support host Ollama with
+`qwen3:4b` for generation and `qwen3-embedding:0.6b` for embeddings, without API keys.
+Select it using `AI_PROVIDER=ollama`; Gemini remains an optional adapter. Ollama requests
+768 output dimensions, validates/normalizes returned vectors, and stores a provider-qualified
+embedding model identifier so vectors from different providers cannot mix. The browser
+still calls Spring only, and all project authorization, signed internal calls, SQL scope,
+READY-state restrictions and source validation remain mandatory. Local inference has
+bounded longer timeouts. Reindex documents when changing embedding providers/models.
+
 | Layer | Technology | Notes |
 |---|---|---|
 | Web app | React + TypeScript + Vite | React Router, TanStack Query, typed API client |

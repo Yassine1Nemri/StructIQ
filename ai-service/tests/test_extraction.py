@@ -133,3 +133,16 @@ def test_extracted_text_limit_and_worker_timeout_are_sanitized(context, monkeypa
     response = client.post('/internal/extract', content=body, headers=headers)
     assert response.json() == {'pages': [], 'code': 'EXTRACTION_TIMEOUT'}
     assert SECRET not in response.text
+
+
+def test_internal_signatures_bind_operation_and_scope(context):
+    client, root, path, project, document = context
+    body, headers = signed(project, document)
+    assert client.post('/internal/index', content=body, headers=headers).status_code == 401
+    body = json.dumps({'projectId': str(project)}).encode()
+    stamp, nonce = str(int(time.time())), str(uuid4())
+    canonical = f'POST\n/internal/status\n{stamp}\n{nonce}\n{hashlib.sha256(body).hexdigest()}'
+    headers = {'X-Internal-Timestamp': stamp, 'X-Internal-Nonce': nonce,
+               'X-Internal-Signature': hmac.new(SECRET.encode(), canonical.encode(), hashlib.sha256).hexdigest()}
+    assert client.post('/internal/status', content=body, headers=headers).json() == {'configured': False}
+    assert client.post('/internal/status', content=body, headers=headers).status_code == 401

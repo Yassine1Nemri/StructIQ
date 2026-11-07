@@ -15,7 +15,7 @@ import io.swagger.v3.oas.models.media.MediaType;
 import io.swagger.v3.oas.models.responses.ApiResponse;
 
 @Configuration
-@OpenAPIDefinition(info=@Info(title="StructIQ API", version="0.4.0",
+@OpenAPIDefinition(info=@Info(title="StructIQ API", version="0.5.0",
     description="Project membership is checked against the database on every request. Nonmembers receive 404. Project PATCH nulls retain existing values; task PATCH null assigneeId/dueDate clears them."),
     security=@SecurityRequirement(name="bearerAuth"))
 @SecurityScheme(name="bearerAuth", type=SecuritySchemeType.HTTP, scheme="bearer", bearerFormat="JWT")
